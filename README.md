@@ -48,16 +48,6 @@ Assumptions for timing: official Docker container on a mid-range cloud VM (≈2 
 
 Attack Surface scoring flows through three capped buckets **(Exposure ≤45, Hygiene ≤35, Sensitivity ≤20)**. Each endpoint’s attributes—login transport, HTTP status, open/management/database ports, Katana link volume, cloud shielding, TLS version/expiry/protocols, security headers, email auth posture, DNSSEC, employee/API classification, tech stack breadth, cloud resource type—feeds the bucket-specific contributions. The final score is the capped sum of those buckets (max 100) and the top contributor explanations come from the same contribution list.
 
-<img src="https://chintangurjar.com/images/riskscore.png"/>
-
----
-# Screenshots
-
-<img src="https://chintangurjar.com/images/candyss3.png"/>
-<img src="https://chintangurjar.com/images/candyss2.png"/>
-<img src="https://chintangurjar.com/images/candyss1.png"/>
-
----
 
 > **Why This Matters**  
 > This approach helps you quickly **prioritize** which assets warrant deeper testing. Subdomains with high counts of open ports, advanced internal usage, missing headers, or login panels are more complex, more privileged, or more likely to be misconfigured—therefore, your security team can focus on those first.
@@ -150,8 +140,6 @@ bash candy.sh target.txt
 ```
 Manual runs continue to emit `output/run-*` folders in the repository root. The control plane only relocates runs that it initiated into `output/projects/<project>/`.
 
-# BlackHat Video
-https://www.youtube.com/watch?v=LHlU4CYNj1M
 
 # Future Roadmap
 
