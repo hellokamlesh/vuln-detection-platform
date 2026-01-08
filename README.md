@@ -1,3 +1,5 @@
+# vuln-detection-platform
+entralized vulnerability detection system with intelligent querying and containerized deployment.
 # Candy 2.0
 <p align="center">
   <a href="#features">Features</a> •
