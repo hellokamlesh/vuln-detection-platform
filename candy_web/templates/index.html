@@ -1,0 +1,958 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <title>Centralized Vulnerability Detection</title>
+  <style>
+    :root {
+      color-scheme: dark;
+      --bg: #0f172a;
+      --panel-bg: rgba(15, 23, 42, 0.9);
+      --panel-border: rgba(148, 163, 184, 0.25);
+      --text: #f1f5f9;
+      --muted: #a5b4fc;
+      --muted-strong: #cbd5f5;
+      --accent: linear-gradient(120deg, #22d3ee, #6366f1);
+      --accent-strong: #38bdf8;
+      --accent-text: #0f172a;
+      --table-header: rgba(148, 163, 184, 0.12);
+      --table-row: rgba(15, 23, 42, 0.78);
+      --table-row-hover: rgba(96, 165, 250, 0.18);
+      --table-row-selected: rgba(59, 130, 246, 0.28);
+      --divider: rgba(148, 163, 184, 0.16);
+      --modal-bg: rgba(15, 23, 42, 0.97);
+      --input-bg: #f8fafc;
+      --input-text: #0f172a;
+      --shadow: 0 24px 48px rgba(15, 23, 42, 0.55);
+    }
+
+    body[data-theme="light"] {
+      color-scheme: light;
+      --bg: #f8fafc;
+      --panel-bg: #ffffff;
+      --panel-border: rgba(148, 163, 184, 0.2);
+      --text: #0f172a;
+      --muted: #475569;
+      --muted-strong: #1e293b;
+      --accent: linear-gradient(120deg, #2563eb, #7c3aed);
+      --accent-strong: #2563eb;
+      --accent-text: #f8fafc;
+      --table-header: rgba(226, 232, 240, 0.95);
+      --table-row: rgba(248, 250, 252, 0.95);
+      --table-row-hover: rgba(37, 99, 235, 0.12);
+      --table-row-selected: rgba(37, 99, 235, 0.2);
+      --divider: rgba(148, 163, 184, 0.22);
+      --modal-bg: #ffffff;
+      --input-bg: #ffffff;
+      --input-text: #0f172a;
+      --shadow: 0 18px 36px rgba(15, 23, 42, 0.22);
+    }
+
+    /* === [This is all your CSS from app.css] === */
+    
+    body {
+      margin: 0;
+      min-height: 100vh;
+      background: var(--bg);
+      color: var(--text);
+      font-family: "Segoe UI", system-ui, -apple-system, BlinkMacSystemFont, "Roboto", sans-serif;
+      display: flex;
+      flex-direction: column;
+    }
+
+    .top-bar {
+      padding: 24px 40px 18px;
+      border-bottom: 1px solid var(--divider);
+      display: flex;
+      align-items: flex-start;
+      justify-content: space-between;
+      gap: 24px;
+      background: linear-gradient(135deg, rgba(15, 23, 42, 0.95), rgba(30, 41, 59, 0.85));
+    }
+
+    body[data-theme="light"] .top-bar {
+      background: linear-gradient(135deg, rgba(37, 99, 235, 0.92), rgba(79, 70, 229, 0.88));
+    }
+
+    .brand {
+      display: flex;
+      flex-direction: column;
+      gap: 6px;
+    }
+
+    .brand-title {
+      display: flex;
+      align-items: baseline;
+      gap: 12px;
+    }
+
+    .brand-title h1 {
+      margin: 0;
+      font-size: 2.5rem;
+      color: #f8fafc;
+    }
+
+    .tagline {
+      margin: 0;
+      color: var(--muted);
+      font-size: 1rem;
+      color: #f8fafc;
+    }
+
+    .top-actions {
+      display: flex;
+      gap: 12px;
+      align-items: center;
+    }
+
+    .theme-toggle {
+      border: none;
+      border-radius: 999px;
+      width: 44px;
+      height: 44px;
+      font-size: 1.3rem;
+      cursor: pointer;
+      background: var(--panel-bg);
+      color: var(--muted-strong);
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      box-shadow: inset 0 0 0 1px var(--divider);
+      transition: transform 0.15s ease, box-shadow 0.15s ease;
+    }
+
+    .theme-toggle:hover {
+      transform: translateY(-1px);
+      box-shadow: 0 10px 24px rgba(14, 165, 233, 0.28);
+    }
+
+    main {
+      flex: 1;
+      padding: 32px 2% 48px;
+      display: flex;
+      justify-content: center;
+      flex-direction: column;
+      gap: 32px;
+    }
+
+    .panel {
+      width: 100%;
+      max-width: 1400px;
+      background: var(--panel-bg);
+      border: 1px solid var(--panel-border);
+      border-radius: 20px;
+      padding: 28px 30px 32px;
+      box-shadow: var(--shadow);
+      display: flex;
+      flex-direction: column;
+      margin: 0 auto;
+    }
+
+    .info-section {
+      animation: slideInUp 0.6s ease-out;
+    }
+
+    .pro-tips-info-section {
+      animation: slideInUp 0.8s ease-out;
+    }
+
+    @keyframes slideInUp {
+      from {
+        opacity: 0;
+        transform: translateY(30px);
+      }
+      to {
+        opacity: 1;
+        transform: translateY(0);
+      }
+    }
+    
+    @keyframes pulse {
+      0%, 100% {
+        transform: scale(1);
+      }
+      50% {
+        transform: scale(1.08);
+      }
+    }
+    
+    @keyframes fadeInScale {
+      from {
+        opacity: 0;
+        transform: scale(0.95) translateY(10px);
+      }
+      to {
+        opacity: 1;
+        transform: scale(1) translateY(0);
+      }
+    }
+    
+    @keyframes fadeInLeft {
+      from {
+        opacity: 0;
+        transform: translateX(-20px);
+      }
+      to {
+        opacity: 1;
+        transform: translateX(0);
+      }
+    }
+
+    .info-header {
+      display: flex;
+      align-items: center;
+      gap: 12px;
+      margin-bottom: 24px;
+    }
+
+    .info-icon {
+      font-size: 1.8rem;
+      width: 40px;
+      height: 40px;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      background: rgba(37, 99, 235, 0.18);
+      border-radius: 12px;
+      animation: pulse 2s ease-in-out infinite;
+    }
+
+    .info-header h3 {
+      margin: 0;
+      font-size: 1.4rem;
+      color: var(--text);
+    }
+
+    .info-subtitle {
+      margin: 16px 0 24px;
+      color: var(--muted);
+      font-size: 0.95rem;
+      font-weight: 600;
+    }
+
+    .features-grid {
+      display: grid;
+      grid-template-columns: repeat(auto-fit, minmax(280px, 1fr));
+      gap: 16px;
+      margin-bottom: 32px;
+    }
+
+    .feature-item {
+      display: flex;
+      gap: 12px;
+      padding: 14px;
+      background: rgba(15, 23, 42, 0.4);
+      border-radius: 12px;
+      border: 1px solid rgba(148, 163, 184, 0.15);
+      transition: all 0.3s ease;
+      animation: fadeInScale 0.6s ease-out backwards;
+    }
+
+    .feature-item:nth-child(1) { animation-delay: 0.05s; }
+    .feature-item:nth-child(2) { animation-delay: 0.1s; }
+    .feature-item:nth-child(3) { animation-delay: 0.15s; }
+    .feature-item:nth-child(4) { animation-delay: 0.2s; }
+    .feature-item:nth-child(5) { animation-delay: 0.25s; }
+    .feature-item:nth-child(6) { animation-delay: 0.3s; }
+    .feature-item:nth-child(7) { animation-delay: 0.35s; }
+    .feature-item:nth-child(8) { animation-delay: 0.4s; }
+    .feature-item:nth-child(9) { animation-delay: 0.45s; }
+    .feature-item:nth-child(10) { animation-delay: 0.5s; }
+
+    .feature-item:hover {
+      background: rgba(37, 99, 235, 0.12);
+      border-color: rgba(37, 99, 235, 0.3);
+      transform: translateY(-2px);
+      box-shadow: 0 8px 20px rgba(37, 99, 235, 0.15);
+    }
+
+    .feature-emoji {
+      font-size: 1.4rem;
+      min-width: 32px;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+    }
+
+    .feature-text {
+      display: flex;
+      flex-direction: column;
+      gap: 2px;
+    }
+
+    .feature-title {
+      font-weight: 600;
+      color: var(--text);
+      font-size: 0.95rem;
+    }
+
+    .feature-desc {
+      font-size: 0.85rem;
+      color: var(--muted);
+    }
+
+    .pro-tips-section {
+      background: rgba(37, 99, 235, 0.08);
+      border: 1px solid rgba(37, 99, 235, 0.2);
+      border-radius: 14px;
+      padding: 20px;
+    }
+
+    .pro-tips-header {
+      display: flex;
+      align-items: center;
+      gap: 10px;
+      margin-bottom: 16px;
+    }
+
+    .pro-tips-icon {
+      font-size: 1.6rem;
+    }
+
+    .pro-tips-header h4 {
+      margin: 0;
+      font-size: 1.1rem;
+      color: var(--text);
+    }
+
+    .tips-grid {
+      display: grid;
+      grid-template-columns: repeat(auto-fit, minmax(240px, 1fr));
+      gap: 12px;
+    }
+
+    .tip-item {
+      display: flex;
+      gap: 10px;
+      padding: 12px;
+      background: rgba(15, 23, 42, 0.3);
+      border-radius: 10px;
+      border-left: 3px solid rgba(37, 99, 235, 0.5);
+      animation: fadeInLeft 0.6s ease-out backwards;
+    }
+
+    .tip-item:nth-child(1) { animation-delay: 0.6s; }
+    .tip-item:nth-child(2) { animation-delay: 0.7s; }
+    .tip-item:nth-child(3) { animation-delay: 0.8s; }
+    .tip-item:nth-child(4) { animation-delay: 0.9s; }
+
+    .tip-bullet {
+      font-size: 1.2rem;
+      min-width: 20px;
+      color: rgba(37, 99, 235, 0.8);
+    }
+
+    .tip-content {
+      font-size: 0.9rem;
+      color: var(--muted-strong);
+      line-height: 1.5;
+    }
+
+    .tip-highlight {
+      font-weight: 600;
+      color: var(--text);
+    }
+
+    body[data-theme="light"] .feature-item {
+      background: rgba(37, 99, 235, 0.06);
+      border-color: rgba(37, 99, 235, 0.15);
+    }
+
+    body[data-theme="light"] .feature-item:hover {
+      background: rgba(37, 99, 235, 0.12);
+      border-color: rgba(37, 99, 235, 0.3);
+    }
+
+    body[data-theme="light"] .pro-tips-section {
+      background: rgba(37, 99, 235, 0.08);
+      border-color: rgba(37, 99, 235, 0.2);
+    }
+
+    body[data-theme="light"] .tip-item {
+      background: rgba(226, 232, 240, 0.6);
+      border-color: rgba(37, 99, 235, 0.5);
+    }
+    
+    /* === [This is CSS that was missing from your app.css file, but was in your app.js file] === */
+    /* === [It is needed for the buttons and modals] === */
+
+    .panel-header {
+      display: flex;
+      justify-content: space-between;
+      align-items: flex-start;
+      gap: 18px;
+    }
+
+    .panel-header h2 {
+      margin: 0;
+      font-size: 1.5rem;
+    }
+
+    .panel-subtitle {
+      margin: 8px 0 0;
+      color: var(--muted);
+      font-size: 0.95rem;
+    }
+
+    .panel-actions {
+      display: flex;
+      gap: 12px;
+      flex-wrap: wrap;
+    }
+
+    button {
+      border: none;
+      border-radius: 999px;
+      padding: 10px 20px;
+      font-weight: 600;
+      cursor: pointer;
+      color: var(--accent-text);
+      background-image: var(--accent);
+      transition: transform 0.15s ease, box-shadow 0.15s ease;
+    }
+
+    button:hover:enabled {
+      transform: translateY(-1px);
+      box-shadow: 0 12px 28px rgba(14, 165, 233, 0.32);
+    }
+
+    button:disabled {
+      opacity: 0.55;
+      cursor: not-allowed;
+      box-shadow: none;
+    }
+
+    .table-wrapper {
+      overflow-x: auto;
+      border-radius: 16px;
+      border: 1px solid var(--panel-border);
+      margin-top: 24px;
+    }
+
+    table {
+      width: 100%;
+      border-collapse: collapse;
+      min-width: 1100px;
+    }
+
+    th, td {
+      padding: 14px 16px;
+      font-size: 0.95rem;
+      text-align: left;
+    }
+
+    tbody td {
+      vertical-align: middle;
+    }
+
+    thead th {
+      background: var(--table-header);
+      color: var(--muted);
+      font-weight: 800;
+      text-transform: uppercase;
+      letter-spacing: 0.04em;
+      font-size: 0.8rem;
+    }
+
+    tbody tr {
+      background: var(--table-row);
+      border-bottom: 1px solid var(--panel-border);
+      transition: background 0.12s ease;
+    }
+    
+    tbody tr.selected {
+      background: var(--table-row-selected);
+    }
+
+    tbody tr:hover {
+      background: var(--table-row-hover);
+    }
+
+    tbody tr.empty td {
+      text-align: center;
+      padding: 36px 16px;
+      color: var(--muted);
+    }
+    
+    .select-col { width: 48px; text-align: center; }
+    .project-name { font-weight: 600; }
+    .project-sub { font-size: 0.85rem; color: var(--muted); margin: 2px 0 0; }
+    .targets-content { display: flex; align-items: center; gap: 8px; }
+    .targets-count { font-weight: 600; }
+    .targets-button {
+      background: rgba(148, 163, 184, 0.15);
+      color: var(--muted-strong);
+      padding: 4px 10px;
+      font-size: 0.85rem;
+    }
+    .targets-button:hover:enabled { background: rgba(148, 163, 184, 0.25); }
+    
+    .progress-col { min-width: 200px; }
+    .progress-wrapper { display: flex; flex-direction: column; gap: 4px; }
+    .progress-bar { width: 100%; height: 6px; background: var(--divider); border-radius: 3px; overflow: hidden; }
+    .progress-fill { height: 100%; width: 0%; background: var(--accent); border-radius: 3px; transition: width 0.3s ease; }
+    .progress-meta { display: flex; justify-content: space-between; font-size: 0.8rem; color: var(--muted); }
+
+    .status-badge {
+      padding: 4px 10px;
+      border-radius: 999px;
+      font-size: 0.85rem;
+      font-weight: 600;
+      background-color: var(--divider);
+      color: var(--muted-strong);
+    }
+    .status-badge.status-succeeded { background-color: rgba(34, 197, 94, 0.2); color: #22c55e; }
+    .status-badge.status-failed { background-color: rgba(239, 68, 68, 0.2); color: #ef4444; }
+    .status-badge.status-running { background-color: rgba(59, 130, 246, 0.2); color: #3b82f6; }
+    .status-badge.status-queued { background-color: rgba(234, 179, 8, 0.2); color: #eab308; }
+    .status-badge.status-scheduled { background-color: rgba(168, 85, 247, 0.2); color: #a855f7; }
+    
+    .results-button {
+      background: var(--accent);
+      color: var(--accent-text);
+      padding: 8px 16px;
+    }
+    
+    .download-col { width: 140px; }
+    .downloads-content { display: flex; gap: 8px; }
+    .download-button {
+      flex: 1;
+      padding: 8px 10px;
+      font-size: 0.85rem;
+      background: rgba(148, 163, 184, 0.15);
+      color: var(--muted-strong);
+    }
+    .download-button:hover:enabled { background: rgba(148, 163, 184, 0.25); }
+
+    .actions-col { width: 160px; }
+    .actions-content { display: flex; gap: 8px; }
+    .icon-button {
+      font-size: 1.1rem;
+      padding: 0;
+      width: 36px;
+      height: 36px;
+      background: rgba(148, 163, 184, 0.15);
+      color: var(--muted-strong);
+      display: flex; align-items: center; justify-content: center;
+    }
+    .icon-button.danger { color: #f472b6; }
+    .icon-button.icon-button--stop { color: #f472b6; }
+    .icon-button:hover:enabled { background: rgba(148, 163, 184, 0.25); }
+
+    .flash {
+      min-height: 1.2em;
+      color: var(--muted);
+      font-size: 0.95rem;
+      margin-top: 16px;
+      padding: 12px 16px;
+      border-radius: 8px;
+      display: none;
+    }
+    .flash.error { display: block; background: rgba(239, 68, 68, 0.15); color: #ef4444; border: 1px solid rgba(239, 68, 68, 0.3); }
+    .flash.success { display: block; background: rgba(34, 197, 94, 0.15); color: #22c55e; border: 1px solid rgba(34, 197, 94, 0.3); }
+
+    /* === [Modal styles that were missing] === */
+
+    .modal-backdrop {
+      position: fixed;
+      inset: 0;
+      background: rgba(0, 0, 0, 0.7);
+      backdrop-filter: blur(8px);
+      z-index: 100;
+      opacity: 0;
+      transition: opacity 0.2s ease-out;
+    }
+    .modal-backdrop.show { opacity: 1; }
+    .modal-backdrop.hidden { display: none; }
+
+    .modal {
+      position: fixed;
+      top: 50%;
+      left: 50%;
+      transform: translate(-50%, -50%);
+      z-index: 101;
+      width: 90%;
+      max-width: 550px;
+      background: var(--modal-bg);
+      border-radius: 16px;
+      border: 1px solid var(--panel-border);
+      box-shadow: var(--shadow);
+      opacity: 0;
+      transform: translate(-50%, -45%) scale(0.95);
+      transition: opacity 0.2s ease-out, transform 0.2s ease-out;
+    }
+    .modal.show {
+      opacity: 1;
+      transform: translate(-50%, -50%) scale(1);
+    }
+    .modal.hidden { display: none; }
+
+    .modal-content {
+      display: flex;
+      flex-direction: column;
+    }
+    
+    .modal-header {
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      padding: 20px 24px;
+      border-bottom: 1px solid var(--divider);
+    }
+    .modal-header h2 {
+      margin: 0;
+      font-size: 1.3rem;
+    }
+    #modal-close, #targets-modal-close {
+      font-size: 2rem;
+      font-weight: 300;
+      color: var(--muted);
+      background: none;
+      width: 40px;
+      height: 40px;
+      padding: 0;
+    }
+    
+    #modal-form {
+      display: flex;
+      flex-direction: column;
+      gap: 16px;
+      padding: 24px;
+    }
+    .modal-field {
+      display: flex;
+      flex-direction: column;
+      gap: 8px;
+    }
+    .modal-field.hidden { display: none; }
+    .modal-field label {
+      font-weight: 600;
+      color: var(--muted-strong);
+    }
+    .modal-field small {
+      font-weight: 400;
+      color: var(--muted);
+    }
+    
+    input[type="text"], input[type="datetime-local"], textarea {
+      background: var(--input-bg);
+      color: var(--input-text);
+      border: 1px solid var(--divider);
+      border-radius: 8px;
+      padding: 10px 12px;
+      font-family: inherit;
+      font-size: 1rem;
+    }
+    body[data-theme="light"] input[type="text"], 
+    body[data-theme="light"] input[type="datetime-local"], 
+    body[data-theme="light"] textarea {
+      border-color: #cbd5e1;
+    }
+    
+    .feedback {
+      min-height: 1.2em;
+      font-size: 0.9rem;
+      color: var(--muted);
+    }
+    .feedback.error {
+      color: #f472b6;
+    }
+
+    .modal-actions {
+      display: flex;
+      justify-content: flex-end;
+      gap: 12px;
+      padding: 20px 24px;
+      border-top: 1px solid var(--divider);
+      background: rgba(0, 0, 0, 0.05);
+    }
+    body[data-theme="light"] .modal-actions {
+      background: #f8fafc;
+    }
+    
+    #modal-cancel, #targets-modal-ok {
+      background: rgba(148, 163, 184, 0.15);
+      color: var(--muted-strong);
+    }
+    #modal-cancel:hover:enabled { background: rgba(148, 163, 184, 0.25); }
+
+    .targets-body {
+      padding: 24px;
+    }
+    .targets-count {
+      font-size: 1.1rem;
+      color: var(--muted);
+      margin: 0 0 16px;
+    }
+    .targets-scroll {
+      max-height: 40vh;
+      overflow-y: auto;
+      background: var(--divider);
+      border-radius: 8px;
+      padding: 12px 16px;
+    }
+    .targets-scroll ol {
+      margin: 0;
+      padding-left: 20px;
+    }
+    .targets-scroll li {
+      padding: 4px 0;
+      color: var(--muted-strong);
+    }
+
+
+    @media (max-width: 768px) {
+      .features-grid {
+        grid-template-columns: repeat(auto-fit, minmax(240px, 1fr));
+      }
+
+      .info-header {
+        flex-direction: column;
+        align-items: flex-start;
+      }
+
+      .tips-grid {
+        grid-template-columns: 1fr;
+      }
+      
+      .panel-header {
+        flex-direction: column;
+      }
+    }
+  </style>
+</head>
+<body data-theme="dark">
+
+  <header class="top-bar">
+    <div class="brand">
+      <div class="brand-title">
+        <h1>Centralized Vulnerability Detection and Intelligent Query</h1>
+      </div>
+      <p class="tagline">Unified visibility across internet-exposed assets, live services, and defensive readiness indicators.</p>
+    </div>
+    <div class="top-actions">
+      <button id="theme-toggle" class="theme-toggle" type="button" aria-label="Toggle theme">🌙</button>
+    </div>
+  </header>
+
+  <main>
+    <section class="info-section">
+      <div class="panel">
+        <div class="info-header">
+          <div class="info-icon">ℹ️</div>
+          <h3>Scan Information</h3>
+        </div>
+
+        <p class="info-subtitle">What will be scanned:</p>
+
+        <div class="features-grid">
+          <div class="feature-item">
+            <div class="feature-emoji">🔍</div>
+            <div class="feature-text">
+              <div class="feature-title">Subdomain Discovery</div>
+              <div class="feature-desc">Subfinder, Assetfinder, Chaos</div>
+            </div>
+          </div>
+
+          <div class="feature-item">
+            <div class="feature-emoji">🌐</div>
+            <div class="feature-text">
+              <div class="feature-title">Port Scanning</div>
+              <div class="feature-desc">Service detection (Naabu)</div>
+            </div>
+          </div>
+
+          <div class="feature-item">
+            <div class="feature-emoji">💻</div>
+            <div class="feature-text">
+              <div class="feature-title">HTTP Service Analysis</div>
+              <div class="feature-desc">HTTPX technology detection</div>
+            </div>
+          </div>
+
+          <div class="feature-item">
+            <div class="feature-emoji">🔐</div>
+            <div class="feature-text">
+              <div class="feature-title">TLS/SSL Analysis</div>
+              <div class="feature-desc">Certificate validation & info</div>
+            </div>
+          </div>
+
+          <div class="feature-item">
+            <div class="feature-emoji">🛡️</div>
+            <div class="feature-text">
+              <div class="feature-title">Security Headers</div>
+              <div class="feature-desc">Assessment & compliance</div>
+            </div>
+          </div>
+
+          <div class="feature-item">
+            <div class="feature-emoji">🔑</div>
+            <div class="feature-text">
+              <div class="feature-title">Login Panel Detection</div>
+              <div class="feature-desc">Admin & auth interface mapping</div>
+            </div>
+          </div>
+
+          <div class="feature-item">
+            <div class="feature-emoji">⚡</div>
+            <div class="feature-text">
+              <div class="feature-title">API Endpoint Discovery</div>
+              <div class="feature-desc">Hidden & exposed endpoints</div>
+            </div>
+          </div>
+
+          <div class="feature-item">
+            <div class="feature-emoji">☁️</div>
+            <div class="feature-text">
+              <div class="feature-title">Cloud Infrastructure</div>
+              <div class="feature-desc">AWS, Azure, GCP mapping</div>
+            </div>
+          </div>
+
+          <div class="feature-item">
+            <div class="feature-emoji">📸</div>
+            <div class="feature-text">
+              <div class="feature-title">Screenshot Capture</div>
+              <div class="feature-desc">Automatic visual documentation</div>
+            </div>
+          </div>
+
+          <div class="feature-item">
+            <div class="feature-emoji">📊</div>
+            <div class="feature-text">
+              <div class="feature-title">Comprehensive Reporting</div>
+              <div class="feature-desc">Multi-format export & analysis</div>
+            </div>
+          </div>
+        </div>
+      </div>
+    </section>
+
+    <section class="panel">
+      <div class="panel-header">
+        <div>
+          <h2>Scan History</h2>
+          <p class="panel-subtitle">Select a scan to modify, rerun, or clean up results.</p>
+        </div>
+        <div class="panel-actions">
+          <button id="new-scan-btn" type="button">New Scan</button>
+          <button id="modify-scan-btn" type="button" disabled>Modify</button>
+          <button id="delete-scan-btn" type="button" disabled>Delete</button>
+        </div>
+      </div>
+
+      <div id="flash-message" class="flash" aria-live="polite"></div>
+
+      <div class="table-wrapper">
+        <table id="scan-table">
+          <thead>
+            <tr>
+              <th scope="col" class="select-col">
+                <input type="checkbox" id="select-all" aria-label="Select all scans">
+              </th>
+              <th scope="col">#</th>
+              <th scope="col">Project</th>
+              <th scope="col">Targets</th>
+              <th scope="col">Progress</th>
+              <th scope="col">Last Run</th>
+              <th scope="col">Status</th>
+              <th scope="col">View Results</th>
+              <th scope="col" class="download-col">Download Report</th>
+              <th scope="col" class="actions-col">Actions</th>
+            </tr>
+          </thead>
+          <tbody id="scan-table-body">
+            <tr class="empty">
+              <td colspan="10">No scans yet. Start with <strong>New Scan</strong>.</td>
+            </tr>
+          </tbody>
+        </table>
+      </div>
+    </section>
+
+    <section class="pro-tips-info-section">
+      <div class="panel">
+        <div class="pro-tips-header">
+          <div class="pro-tips-icon">💡</div>
+          <h4>Pro Tips:</h4>
+        </div>
+
+        <div class="tips-grid">
+          <div class="tip-item">
+            <div class="tip-bullet">•</div>
+            <div class="tip-content">Use <span class="tip-highlight">"Queue"</span> mode to manage multiple scans efficiently</div>
+          </div>
+
+          <div class="tip-item">
+            <div class="tip-bullet">•</div>
+            <div class="tip-content"><span class="tip-highlight">Schedule scans</span> for off-peak hours to avoid detection</div>
+          </div>
+
+          <div class="tip-item">
+            <div class="tip-bullet">•</div>
+            <div class="tip-content">Monitor <span class="tip-highlight">real-time progress</span> in the dashboard</div>
+          </div>
+
+          <div class="tip-item">
+            <div class="tip-bullet">•</div>
+            <div class="tip-content">Download <span class="tip-highlight">comprehensive reports</span> in multiple formats</div>
+          </div>
+        </div>
+      </div>
+    </section>
+  </main>
+
+  <div id="modal-backdrop" class="modal-backdrop hidden"></div>
+
+  <section id="scan-modal" class="modal hidden" role="dialog" aria-modal="true" aria-labelledby="modal-title">
+    <div class="modal-content">
+      <header class="modal-header">
+        <h2 id="modal-title">New Scan</h2>
+        <button id="modal-close" type="button" aria-label="Close">&times;</button>
+      </header>
+      <form id="modal-form">
+        <div class="modal-field">
+          <label for="modal-project-name">Company name</label>
+          <input id="modal-project-name" name="project-name" type="text" placeholder="acme-security" required>
+        </div>
+        <div class="modal-field">
+          <label for="modal-targets">Primary domains <small>(one per line)</small></label>
+          <textarea id="modal-targets" name="targets" rows="8" placeholder="example.com&#10;api.example.com" required></textarea>
+        </div>
+        <div class="modal-field hidden" id="modal-schedule-field">
+          <label for="modal-schedule">Schedule start</label>
+          <input id="modal-schedule" name="schedule" type="datetime-local">
+        </div>
+        <div id="modal-feedback" class="feedback" aria-live="polite"></div>
+        <div class="modal-actions">
+          <button type="button" data-run-mode="immediate">Run Now</button>
+          <button type="button" data-run-mode="queue">Add to Queue</button>
+          <button type="button" data-run-mode="schedule">Schedule</button>
+          <button type="button" id="modal-cancel">Cancel</button>
+        </div>
+      </form>
+    </div>
+  </section>
+
+  <section id="targets-modal" class="modal hidden" role="dialog" aria-modal="true" aria-labelledby="targets-modal-title">
+    <div class="modal-content">
+      <header class="modal-header">
+        <h2 id="targets-modal-title">Target Domains</h2>
+        <button id="targets-modal-close" type="button" aria-label="Close">&times;</button>
+      </header>
+      <div class="targets-body">
+        <p class="targets-count"><span id="targets-count">0</span> primary domain(s)</p>
+        <div class="targets-scroll">
+          <ol id="targets-list"></ol>
+        </div>
+      </div>
+      <div class="modal-actions">
+        <button type="button" id="targets-modal-ok">Close</button>
+      </div>
+    </div>
+  </section>
+
+  <script src="{{ url_for('static', filename='app.js') }}"></script>
+</body>
+</html>

@@ -1,0 +1,746 @@
+const dnsxData = filterRecordsByHost(rawDnsxData, record => record.host).map(record => {
+  const hostValue = normalizeHost(record.host);
+  return {
+    ...record,
+    host: hostValue ? hostValue.toLowerCase() : hostValue
+  };
+});
+const httpxData = filterRecordsByHost(rawHttpxData, record => {
+  const inputHost = normalizeHost((record.input || "").split(":")[0]);
+  if (hostLooksValid(inputHost)) return inputHost;
+  return extractHostFromUrl(record.url || record.host || record.input || "");
+}).map(record => ({
+  ...record,
+  input: record.input ? record.input.trim().toLowerCase() : record.input
+}));
+const naabuData = filterRecordsByHost(rawNaabuData, record => record.host).map(record => ({
+  ...record,
+  host: (() => {
+    const value = normalizeHost(record.host);
+    return value ? value.toLowerCase() : value;
+  })()
+}));
+const loginData = filterRecordsByHost(
+  rawLoginData,
+  record => extractHostFromUrl(record.url || record.final_url || record.host || "")
+).map(record => {
+  const details = dedupeCleanStrings(record?.login_detection?.login_details || []);
+  return {
+    ...record,
+    login_detection: {
+      ...record.login_detection,
+      login_found: record?.login_detection?.login_found || "No",
+      login_details: details
+    }
+  };
+});
+const apiData = filterRecordsByHost(rawApiData, record => record.domain).map(record => ({
+  ...record,
+  domain: (() => {
+    const value = normalizeHost(record.domain);
+    return value ? value.toLowerCase() : value;
+  })()
+}));
+const colleagueData = filterRecordsByHost(rawColleagueData, record => record.domain).map(record => ({
+  ...record,
+  domain: (() => {
+    const value = normalizeHost(record.domain);
+    return value ? value.toLowerCase() : value;
+  })(),
+  colleague_matches: dedupeCleanStrings(record.colleague_matches || [])
+}));
+const cloudInfraData = filterRecordsByHost(
+  rawCloudInfraData,
+  record => record.Asset || record.ResourceIdentifier || extractHostFromUrl(record.PrimaryURL || "")
+).map(record => ({
+  ...record,
+  Asset: (() => {
+    const value = normalizeHost(record.Asset || record.ResourceIdentifier || record.Asset);
+    return value ? value.toLowerCase() : value;
+  })(),
+  ResourceIdentifier: (() => {
+    const value = normalizeHost(record.ResourceIdentifier || record.Asset);
+    return value ? value.toLowerCase() : value;
+  })(),
+  PrimaryURL: record.PrimaryURL ? record.PrimaryURL.trim() : record.PrimaryURL
+}));
+const tlsInventoryData = filterRecordsByHost(
+  rawTlsInventoryData,
+  record => record.Host || record.host || record.Domain || record.domain
+).map(record => ({
+  ...record,
+  Host: (() => {
+    const value = normalizeHost(record.Host || record.host);
+    return value ? value.toLowerCase() : value;
+  })(),
+  Domain: (() => {
+    const value = normalizeHost(record.Domain || record.domain);
+    return value ? value.toLowerCase() : value;
+  })()
+}));
+const secHeadersData = filterRecordsByHost(
+  rawSecHeadersData,
+  record => extractHostFromUrl(record.URL || record.Domain || "")
+).map(record => ({
+  ...record,
+  Domain: (() => {
+    const value = normalizeHost(record.Domain);
+    return value ? value.toLowerCase() : value;
+  })()
+}));
+const katanaData = (() => {
+  const entries = rawKatanaData && typeof rawKatanaData === "object" ? Object.entries(rawKatanaData) : [];
+  const result = {};
+  entries.forEach(([origin, links]) => {
+    const originHost = extractHostFromUrl(origin);
+    if (!hostLooksValid(originHost)) return;
+    const filteredLinks = Array.isArray(links)
+      ? Array.from(new Set(links.filter(link => hostLooksValid(extractHostFromUrl(link)))))
+      : [];
+    if (filteredLinks.length) {
+      result[origin] = filteredLinks;
+    }
+  });
+  return result;
+})();
+const secDataClean = filterRecordsByHost(
+  Array.isArray(secData) ? secData : [],
+  record => record.Domain
+).map(record => ({
+  ...record,
+  Domain: (() => {
+    const value = normalizeHost(record.Domain);
+    return value ? value.toLowerCase() : value;
+  })()
+}));
+
+if (typeof tlsInventoryData !== "undefined") {
+            window.tlsInventoryData = Array.isArray(tlsInventoryData) ? tlsInventoryData : [];
+          } else if (!Array.isArray(window.tlsInventoryData)) {
+            window.tlsInventoryData = [];
+          }
+          if (typeof cloudInfraData !== "undefined") {
+            window.cloudInfraData = Array.isArray(cloudInfraData) ? cloudInfraData : [];
+          } else if (!Array.isArray(window.cloudInfraData)) {
+            window.cloudInfraData = [];
+          }
+          const secHeadersArray = (() => {
+            if (typeof secHeadersData !== "undefined") {
+              return Array.isArray(secHeadersData) ? secHeadersData : [];
+            }
+            if (Array.isArray(window.secHeadersData)) return window.secHeadersData;
+            return [];
+          })();
+          window.secHeadersData = secHeadersArray;
+
+const secMapDomain = {};
+          const secMapUrl = {};
+          secDataClean.forEach(item => {
+            if (!item || !item.Domain) return;
+            if (!secMapDomain[item.Domain]) {
+              secMapDomain[item.Domain] = item;
+            }
+          });
+          secHeadersArray.forEach(item => {
+            if (!item || !item.URL) return;
+            secMapUrl[item.URL] = item;
+          });
+          const loginMap = {};
+          loginData.forEach(item => { loginMap[item.url] = item.login_detection.login_found; });
+          const apiMap = {};
+          apiData.forEach(item => { apiMap[item.domain] = item.api_endpoint; });
+          const colleagueMap = {};
+          colleagueData.forEach(item => {
+            if (!item || !item.domain) return;
+            const matches = Array.isArray(item.colleague_matches) ? item.colleague_matches : [];
+            colleagueMap[item.domain] = {
+              status: item.colleague_endpoint,
+              colleague_endpoint: item.colleague_endpoint,
+              matches
+            };
+          });
+
+          const endpointsCount = httpxData.length;
+          const loginFoundCount = loginData.filter(item => item.login_detection.login_found === "Yes").length;
+          const domainSet = new Set();
+          const liveAssetSet = new Set();
+          dnsxData.forEach(d => {
+            const hostNormalized = (d.host || "").trim().toLowerCase();
+            if (!hostNormalized) return;
+            domainSet.add(hostNormalized);
+            const ipCandidates = []
+              .concat(Array.isArray(d.a) ? d.a : [])
+              .concat(Array.isArray(d.aaaa) ? d.aaaa : [])
+              .map(ip => (typeof ip === "string" ? ip.trim() : ""));
+            const hasLiveIp = ipCandidates.some(ip => ip);
+            if (hasLiveIp) {
+              liveAssetSet.add(hostNormalized);
+            }
+          });
+          const resolvableDomainSet = liveAssetSet;
+          const totalSubdomains = domainSet.size;
+          const liveAssetCount = liveAssetSet.size;
+          const uniqueWebVariantsSet = new Set();
+          httpxData.forEach(item => {
+            let variantKey = "";
+            if (typeof item.url === "string" && item.url) {
+              try {
+                const url = new URL(item.url);
+                variantKey = `${url.protocol}//${url.hostname}${url.port ? `:${url.port}` : ""}`;
+              } catch (e) {
+                /* ignore parse failure and fall back */
+              }
+            }
+            if (!variantKey && typeof item.input === "string" && item.input.trim()) {
+              const raw = item.input.trim().toLowerCase();
+              const parts = raw.split("/");
+              const hostPart = parts[0];
+              const scheme = typeof item.scheme === "string" && item.scheme.trim() ? item.scheme.trim().toLowerCase() : "http";
+              variantKey = `${scheme}://${hostPart}`;
+            }
+            if (!variantKey && typeof item.host === "string" && item.host.trim()) {
+              const scheme = typeof item.scheme === "string" && item.scheme.trim() ? item.scheme.trim().toLowerCase() : "http";
+              const port = typeof item.port === "string" && item.port.trim() ? `:${item.port.trim()}` : "";
+              variantKey = `${scheme}://${item.host.trim().toLowerCase()}${port}`;
+            }
+            if (!variantKey) return;
+            uniqueWebVariantsSet.add(variantKey.toLowerCase());
+          });
+          const pipelineStats = {
+            discovered: totalSubdomains,
+            liveAssets: liveAssetCount,
+            resolvable: liveAssetCount,
+            webHosts: uniqueWebVariantsSet.size || endpointsCount,
+            endpoints: endpointsCount,
+            logins: loginFoundCount
+          };
+
+          // Build per-origin links map so each row shows ONLY its own origin’s links
+          (function () {
+            function toOrigin(u) {
+              try { return new URL(u).origin; } catch (e) { return ""; }
+            }
+
+            const allLinks = [];
+            if (katanaData && typeof katanaData === "object") {
+              Object.keys(katanaData).forEach(k => {
+                const arr = Array.isArray(katanaData[k]) ? katanaData[k] : [];
+                for (const l of arr) allLinks.push(l);
+              });
+            }
+
+            const byOrigin = {};
+            for (const l of allLinks) {
+              const o = toOrigin(l);
+              if (!o) continue;
+              if (!byOrigin[o]) byOrigin[o] = new Set();
+              byOrigin[o].add(l);
+            }
+
+            const linksMap = {};
+            (httpxData || []).forEach(rec => {
+              const o = toOrigin(rec.url);
+              const set = byOrigin[o] || new Set();
+              linksMap[rec.url] = Array.from(set).sort();
+            });
+
+            window.linksMap = linksMap;
+          })();
+
+          const ipIntelIndex = buildIpIntelIndex(ipIntelData);
+          const portscanInsights = preparePortscanInsights(portscanData);
+          window.portscanByHost = portscanInsights.byHost;
+          window.portscanByIp = portscanInsights.byIp;
+
+          const combinedData = {};
+          dnsxData.forEach(d => { combinedData[d.host] = { dns: d, http: [] }; });
+          httpxData.forEach(h => {
+            const rawInput = (h.input || "").split(":")[0];
+            let domain = rawInput ? rawInput.trim().toLowerCase() : "";
+            if (!domain) {
+              domain = (extractHostFromUrl(h.url || h.input || h.host || "") || "").toLowerCase();
+            }
+            if (!domain) return;
+            if (!combinedData[domain]) combinedData[domain] = { dns: null, http: [] };
+            combinedData[domain].http.push(h);
+          });
+
+          buildTableRows(combinedData, secMapDomain, secMapUrl, loginMap, apiMap, colleagueMap, portscanInsights, ipIntelIndex, window.cloudInfraData);
+          finalizeColors();
+          populateColumnFilters();
+          document.querySelectorAll('#filter-row select').forEach(select => { select.addEventListener('change', onFilterChange); });
+          renderTable(getFilteredRows());
+
+
+          const httpEndpointCount = httpxData.filter(item => {
+            const scheme = (item.scheme || "").toLowerCase();
+            const url = item.url || "";
+            return scheme === "http" || url.startsWith("http://");
+          }).length;
+          const httpsEndpointCount = httpxData.filter(item => {
+            const scheme = (item.scheme || "").toLowerCase();
+            const url = item.url || "";
+            return scheme === "https" || url.startsWith("https://");
+          }).length;
+          const httpLoginCount = loginData.filter(item => item?.login_detection?.login_found === "Yes" && (item.url || "").startsWith("http://")).length;
+          const httpsLoginCount = loginData.filter(item => item?.login_detection?.login_found === "Yes" && (item.url || "").startsWith("https://")).length;
+          const httpLoginHosts = new Set();
+          const httpsLoginHosts = new Set();
+          loginData.forEach(item => {
+            if (!item?.login_detection || item.login_detection.login_found !== "Yes") return;
+            const url = item.url || "";
+            try {
+              const parsed = new URL(url);
+              if (parsed.protocol === "https:") {
+                httpsLoginHosts.add(parsed.hostname);
+              } else if (parsed.protocol === "http:") {
+                httpLoginHosts.add(parsed.hostname);
+              }
+            } catch {
+              if (url.startsWith("https://")) {
+                httpsLoginHosts.add(url.replace(/^https?:\/\//, ""));
+              } else if (url.startsWith("http://")) {
+                httpLoginHosts.add(url.replace(/^https?:\/\//, ""));
+              }
+            }
+          });
+
+          const employeeAssetCount = Object.values(colleagueMap).filter(value => {
+            if (!value) return false;
+            if (typeof value === "string") return value === "Yes";
+            const status = value.status || value.colleague_endpoint;
+            return status === "Yes";
+          }).length;
+          const colleagueTotal = Object.keys(colleagueMap).length;
+          const nxdomainCount = dnsxData.filter(item => item.status_code === "NXDOMAIN").length;
+
+          const ipClusterMap = new Map();
+          dnsxData.forEach(entry => {
+            if (!Array.isArray(entry.a) || !entry.a.length) return;
+            const key = entry.a.join(", ");
+            if (!ipClusterMap.has(key)) {
+              ipClusterMap.set(key, new Set());
+            }
+            ipClusterMap.get(key).add(entry.host);
+          });
+          const clusterSummaries = Array.from(ipClusterMap.entries()).map(([ip, hosts]) => ({
+            ip,
+            hosts: Array.from(hosts),
+            count: hosts.size
+          }));
+          const largestCluster = clusterSummaries.reduce((acc, current) => {
+            if (!acc || current.count > acc.count) return current;
+            return acc;
+          }, null) || { count: 0, ip: "", hosts: [] };
+
+          const totalOpenPorts = portscanInsights.totalPorts;
+          const managementPortCount = portscanInsights.highlightTotals["Management"] || 0;
+          const databasePortCount = (portscanInsights.highlightTotals["Database"] || 0);
+
+          const katanaTotal = Object.values(katanaData || {}).reduce((sum, value) => {
+            if (Array.isArray(value)) return sum + value.length;
+            return sum;
+          }, 0);
+
+          const defaultEmailState = () => ({ spf: false, dkim: false, dmarc: false, dnssec: false });
+          const emailDomainStates = {};
+          secDataClean.forEach(item => {
+            const domainKey = (item?.Domain || "").trim().toLowerCase();
+            if (!domainKey) return;
+            if (!emailDomainStates[domainKey]) {
+              emailDomainStates[domainKey] = defaultEmailState();
+            }
+            const state = emailDomainStates[domainKey];
+            const spf = (item["SPF Record"] || "").toLowerCase();
+            const dkim = (item["DKIM Record"] || "").toLowerCase();
+            const dmarc = (item["DMARC Record"] || "").toLowerCase();
+            const dnssec = (item["DNSSEC Status"] || "").toLowerCase();
+            if (spf.includes("spf1")) state.spf = true;
+            if (dkim.includes("dkim1")) state.dkim = true;
+            if (dmarc.includes("dmarc1")) state.dmarc = true;
+            if (dnssec === "dnssec enabled") state.dnssec = true;
+          });
+          resolvableDomainSet.forEach(domain => {
+            if (!emailDomainStates[domain]) {
+              emailDomainStates[domain] = defaultEmailState();
+            }
+          });
+          const emailBaseline = resolvableDomainSet.size || Object.keys(emailDomainStates).length || pipelineStats.resolvable || 0;
+          let spfCovered = 0;
+          let dkimCovered = 0;
+          let dmarcCovered = 0;
+          let dnssecCovered = 0;
+          const emailStateDomainList = resolvableDomainSet.size
+            ? Array.from(resolvableDomainSet)
+            : Object.keys(emailDomainStates);
+          emailStateDomainList.forEach(domain => {
+            const state = emailDomainStates[domain] || defaultEmailState();
+            if (state.spf) spfCovered++;
+            if (state.dkim) dkimCovered++;
+            if (state.dmarc) dmarcCovered++;
+            if (state.dnssec) dnssecCovered++;
+          });
+          const ratio = (value, total) => {
+            if (!total) return 0;
+            return Math.round((value / total) * 100);
+          };
+          const liveAssetCoverage = ratio(pipelineStats.resolvable, pipelineStats.discovered);
+          const dnsCoverage = liveAssetCoverage;
+
+          const riskLeaderboard = [...riskEntries].sort((a, b) => b.score - a.score);
+          const topRiskEntry = riskLeaderboard[0] || null;
+          const topRiskLabel = topRiskEntry ? describeEndpoint(topRiskEntry) : null;
+
+          const timestamp = formatTimestampUTC(deriveScanTimestamp([dnsxData, httpxData, naabuData, loginData]));
+          const summaryMetaParts = [];
+          if (pipelineStats.endpoints) summaryMetaParts.push(`${pipelineStats.endpoints.toLocaleString()} HTTP endpoints`);
+          if (pipelineStats.discovered) summaryMetaParts.push(`${pipelineStats.discovered.toLocaleString()} domains`);
+          if (totalOpenPorts) summaryMetaParts.push(`${totalOpenPorts.toLocaleString()} open services`);
+          if (katanaTotal) summaryMetaParts.push(`${katanaTotal.toLocaleString()} crawlable URLs`);
+          const summaryMeta = summaryMetaParts.length
+            ? `Based on ${summaryMetaParts.join(", ")}. Trend data unavailable (single run).`
+            : "Trend data unavailable (single run).";
+
+          const dnsStats = {
+            resolvable: pipelineStats.resolvable || 0,
+            nxdomain: nxdomainCount,
+            other: Math.max((pipelineStats.discovered || 0) - (pipelineStats.resolvable || 0) - nxdomainCount, 0)
+          };
+
+          const headerKeys = [
+            { key: "Strict-Transport-Security", label: "HSTS" },
+            { key: "X-Frame-Options", label: "X-Frame-Options" },
+            { key: "Content-Security-Policy", label: "CSP" },
+            { key: "X-XSS-Protection", label: "X-XSS-Protection" },
+            { key: "Referrer-Policy", label: "Referrer-Policy" },
+            { key: "Permissions-Policy", label: "Permissions-Policy" }
+          ];
+          const headerCoverage = {};
+          headerKeys.forEach(header => {
+            headerCoverage[header.label] = { present: 0, missing: 0 };
+          });
+
+          const normalizeHeaderUrl = value => {
+            if (!value) return "";
+            const trimmed = value.trim();
+            if (!trimmed || trimmed === "N/A") return "";
+            try {
+              const parsed = new URL(trimmed);
+              const protocol = parsed.protocol || "http:";
+              const host = parsed.hostname || "";
+              if (!host) return "";
+              const port = parsed.port ? `:${parsed.port}` : "";
+              const path = (parsed.pathname || "").replace(/\/+$/, "");
+              const normalizedPath = path && path !== "/" ? path : "";
+              return `${protocol}//${host}${port}${normalizedPath}`;
+            } catch {
+              return trimmed.replace(/\/+$/, "");
+            }
+          };
+          const uniqueHeaderRecords = new Map();
+          secHeadersArray.forEach(item => {
+            if (!item) return;
+            const key = normalizeHeaderUrl(item.URL || "");
+            if (!key) return;
+            if (!uniqueHeaderRecords.has(key)) {
+              uniqueHeaderRecords.set(key, item);
+            }
+          });
+          const observedHeaderCount = uniqueHeaderRecords.size;
+          const pipelineEndpointCount = pipelineStats.endpoints || (Array.isArray(httpxData) ? httpxData.length : 0);
+          const headerBaseline = observedHeaderCount || pipelineEndpointCount || 0;
+          uniqueHeaderRecords.forEach(record => {
+            headerKeys.forEach(header => {
+              const value = (record[header.key] || "").toString().trim().toLowerCase();
+              if (value && value !== "n/a" && value !== "false" && value !== "none") {
+                headerCoverage[header.label].present += 1;
+              }
+            });
+          });
+          Object.keys(headerCoverage).forEach(label => {
+            const cover = headerCoverage[label];
+            const presentCount = cover.present;
+            cover.missing = Math.max(headerBaseline - presentCount, 0);
+          });
+
+          const emailCoverage = {
+            total: emailBaseline,
+            SPF: { configured: spfCovered, missing: Math.max(emailBaseline - spfCovered, 0) },
+            DKIM: { configured: dkimCovered, missing: Math.max(emailBaseline - dkimCovered, 0) },
+            DMARC: { configured: dmarcCovered, missing: Math.max(emailBaseline - dmarcCovered, 0) },
+            DNSSEC: { configured: dnssecCovered, missing: Math.max(emailBaseline - dnssecCovered, 0) }
+          };
+
+          const exposureMatrix = {
+            endpoints: { http: httpEndpointCount, https: httpsEndpointCount },
+            logins: { http: httpLoginCount, https: httpsLoginCount }
+          };
+
+          const statusCounts = {};
+          httpxData.forEach(item => {
+            const code = String(item.status_code ?? "Unknown");
+            statusCounts[code] = (statusCounts[code] || 0) + 1;
+          });
+          const statusBreakdown = Object.entries(statusCounts).sort((a, b) => {
+            const codeA = Number(a[0]);
+            const codeB = Number(b[0]);
+            const isNumA = !Number.isNaN(codeA);
+            const isNumB = !Number.isNaN(codeB);
+            if (isNumA && isNumB) return codeA - codeB;
+            if (isNumA) return -1;
+            if (isNumB) return 1;
+            return a[0].localeCompare(b[0]);
+          });
+          const statusContext = statusBreakdown.length
+            ? statusBreakdown.map(([code, count]) => `${count}×${code}`).join(", ")
+            : "No HTTP status data observed";
+
+          const cloudStats = (() => {
+            const data = Array.isArray(window.cloudInfraData) ? window.cloudInfraData : [];
+            const stats = {
+              total: 0,
+              unshielded: 0,
+              storage: 0,
+              storageUnshielded: 0,
+              providers: {}
+            };
+            data.forEach(item => {
+              if (!item || typeof item !== "object") return;
+              const provider = (item.CloudProvider || "").trim();
+              const resourceTypeRaw = (item.ResourceType || "").trim();
+              const resourceType = resourceTypeRaw.toLowerCase();
+              const recognized = resourceType !== "" && resourceType !== "other" || provider;
+              if (!recognized) return;
+              stats.total += 1;
+              if (provider) {
+                stats.providers[provider] = (stats.providers[provider] || 0) + 1;
+              }
+              const shielding = (item.WafShielding || "").toLowerCase();
+              const storageLabel = (item.Storage || "").toLowerCase();
+              if (shielding.includes("direct origin")) {
+                stats.unshielded += 1;
+              }
+              if (resourceType.includes("object storage") || storageLabel.includes("object storage")) {
+                stats.storage += 1;
+                if (shielding.includes("direct origin")) {
+                  stats.storageUnshielded += 1;
+                }
+              }
+            });
+            return stats;
+          })();
+
+          const summaryContext = {
+            pipeline: {
+              discovered: pipelineStats.discovered || 0,
+              resolvable: pipelineStats.resolvable || 0,
+              liveAssets: pipelineStats.resolvable || 0,
+              webHosts: pipelineStats.webHosts || 0,
+              endpoints: pipelineStats.endpoints || 0,
+              logins: pipelineStats.logins || 0
+            },
+            httpLogin: {
+              count: httpLoginCount,
+              httpsCount: httpsLoginCount,
+              hosts: Array.from(httpLoginHosts)
+            },
+            httpsLoginCount,
+            totalOpenPorts,
+            managementPortCount,
+            databasePortCount,
+            nxdomainCount,
+            dnsCoverage,
+            dnsStats,
+            emailCoverage: {
+              spfCovered,
+              dkimCovered,
+              dmarcCovered,
+              dnssecCovered,
+              total: emailBaseline
+            },
+            headerCoverage,
+            headerBaseline,
+            largestCluster,
+            katanaTotal,
+            statusContext,
+            employeeAssetCount,
+            colleagueTotal,
+            totalLoginSurfaces: pipelineStats.logins || 0,
+            topRiskScore: Number(topRiskEntry?.score) || 0,
+            topRiskLabel,
+            missingDmarc: Math.max(emailBaseline - dmarcCovered, 0),
+            missingSpf: Math.max(emailBaseline - spfCovered, 0),
+            missingDkim: Math.max(emailBaseline - dkimCovered, 0),
+            dnssecGap: Math.max(emailBaseline - dnssecCovered, 0),
+            cloudStats
+          };
+
+          const actionCandidates = [];
+          const registerAction = (condition, message, weight) => {
+            if (!condition || !message) return;
+            actionCandidates.push({ message, weight });
+          };
+          registerAction(httpLoginCount > 0, `Force HTTPS on ${httpLoginCount} login ${httpLoginCount === 1 ? "surface" : "surfaces"} across ${httpLoginHosts.size || httpLoginCount} host${httpLoginHosts.size === 1 ? "" : "s"}.`, 90);
+          registerAction(managementPortCount + databasePortCount > 0, `Restrict ${managementPortCount + databasePortCount} exposed admin or database services on ${largestCluster.count ? `${largestCluster.count} host${largestCluster.count === 1 ? "" : "s"} (${largestCluster.ip})` : "shared infrastructure"}.`, 85);
+          registerAction(totalOpenPorts > 0 && (managementPortCount + databasePortCount) === 0, `Review ${totalOpenPorts} externally reachable services detected by Naabu for necessity and access controls.`, 65);
+          registerAction(cloudStats.unshielded > 0, `Deploy WAF/CDN shielding on ${cloudStats.unshielded} cloud edge asset${cloudStats.unshielded === 1 ? "" : "s"} operating as direct origin.`, 75);
+          registerAction(cloudStats.storageUnshielded > 0, `Tighten access policies on ${cloudStats.storageUnshielded} exposed object storage endpoint${cloudStats.storageUnshielded === 1 ? "" : "s"}.`, 65);
+          registerAction(summaryContext.missingDmarc > 0, `Roll out DMARC (plus SPF/DKIM) on ${summaryContext.missingDmarc} domain${summaryContext.missingDmarc === 1 ? "" : "s"} lacking email authentication.`, 70);
+          registerAction(summaryContext.missingSpf > 0 && summaryContext.missingDmarc === 0, `Publish SPF for ${summaryContext.missingSpf} domain${summaryContext.missingSpf === 1 ? "" : "s"} still missing sender validation.`, 55);
+          registerAction(summaryContext.dnssecGap > 0 && dnssecCovered === 0, `Evaluate DNSSEC enablement on ${summaryContext.dnssecGap} domain${summaryContext.dnssecGap === 1 ? "" : "s"} with unsigned zones.`, 40);
+          registerAction(nxdomainCount > 0, `Retire ${nxdomainCount} NXDOMAIN hostname${nxdomainCount === 1 ? "" : "s"} to reduce dormant attack surface.`, 50);
+          registerAction(dnsCoverage < 60 && pipelineStats.discovered > 0, `Investigate ${Math.max((pipelineStats.discovered || 0) - (pipelineStats.resolvable || 0), 0)} discovered domains that no longer resolve to confirm decommissioning.`, 45);
+          registerAction(employeeAssetCount > 0 && httpLoginCount === 0, `Tighten access monitoring on ${employeeAssetCount} employee-facing asset${employeeAssetCount === 1 ? "" : "s"} located during the crawl.`, 35);
+          registerAction(katanaTotal > 1000, `Prioritize review of ${katanaTotal.toLocaleString()} crawlable URLs for sensitive exposures or leaked endpoints.`, 30);
+
+          const dedupedActions = [];
+          const seenMessages = new Set();
+          actionCandidates
+            .sort((a, b) => b.weight - a.weight)
+            .forEach(item => {
+              if (seenMessages.has(item.message) || dedupedActions.length >= 6) return;
+              seenMessages.add(item.message);
+              dedupedActions.push(item.message);
+            });
+          const actionItems = dedupedActions.slice(0, 3);
+          if (!actionItems.length) {
+            actionItems.push("Maintain current controls and monitor upcoming scans for emerging trends.");
+          }
+
+          buildScoreboard({
+            pipeline: {
+              discovered: pipelineStats.discovered || 0,
+              resolvable: pipelineStats.resolvable || 0,
+              liveAssets: pipelineStats.resolvable || 0,
+              webHosts: pipelineStats.webHosts || 0
+            },
+            topRisk: topRiskEntry ? {
+              score: topRiskEntry.score,
+              label: topRiskLabel,
+              reasons: Array.isArray(topRiskEntry.reasons) ? topRiskEntry.reasons : [],
+              loginFound: topRiskEntry.loginFound,
+              openPortsCount: topRiskEntry.openPortsCount,
+              dbPortsCount: topRiskEntry.dbPortsCount,
+              managementPortsCount: topRiskEntry.managementPortsCount,
+              breakdown: topRiskEntry.breakdown || null
+            } : null,
+            actions: actionItems,
+            exposure: [
+              { label: "Discovered Subdomains", value: pipelineStats.discovered || 0, meta: "Total subdomains found" },
+              { label: "Live Assets", value: pipelineStats.liveAssets || pipelineStats.resolvable || 0, meta: pipelineStats.discovered ? `${liveAssetCoverage}% of scope` : "", tone: liveAssetCoverage === 100 ? "success" : (liveAssetCoverage >= 75 ? "" : "warning") },
+                  { label: "Active Web Hosts", value: pipelineStats.webHosts || 0, meta: "", context: `Live hosts serving HTTP/S content attackers can reach. HTTP status mix: ${statusContext}.` },
+              { label: "NXDOMAIN Findings", value: nxdomainCount, meta: nxdomainCount ? "Potential hosts to retire" : "Clean", tone: nxdomainCount ? "danger" : "success" }
+            ],
+            authentication: [
+              { label: "Login Surfaces", value: pipelineStats.logins || 0, meta: `${httpLoginCount} HTTP / ${httpsLoginCount} HTTPS` },
+              { label: "HTTP Login Pages", value: httpLoginCount, meta: httpLoginHosts.size ? `${httpLoginHosts.size} hosts` : "", tone: httpLoginCount ? "danger" : "success" },
+              { label: "HTTPS Login Pages", value: httpsLoginCount, meta: httpsLoginHosts.size ? `${httpsLoginHosts.size} hosts` : "", tone: httpsLoginCount ? "success" : "" },
+              { label: "Employee-Facing Assets", value: employeeAssetCount, meta: `of ${colleagueTotal}`, tone: employeeAssetCount ? "warning" : "" }
+            ],
+            controls: [
+              { label: "SPF Coverage", value: `${spfCovered}/${emailBaseline}`, meta: `${ratio(spfCovered, emailBaseline)}%`, tone: emailBaseline && spfCovered === emailBaseline ? "success" : (spfCovered ? "warning" : "danger") },
+              { label: "DMARC Coverage", value: `${dmarcCovered}/${emailBaseline}`, meta: `${ratio(dmarcCovered, emailBaseline)}%`, tone: emailBaseline && dmarcCovered === emailBaseline ? "success" : (dmarcCovered ? "warning" : "danger") },
+              { label: "DKIM Coverage", value: `${dkimCovered}/${emailBaseline}`, meta: `${ratio(dkimCovered, emailBaseline)}%`, tone: dkimCovered ? "warning" : "danger" },
+              { label: "DNSSEC Enabled", value: `${dnssecCovered}/${emailBaseline}`, meta: `${ratio(dnssecCovered, emailBaseline)}%`, tone: dnssecCovered ? "warning" : "danger" }
+            ],
+            metadata: {
+              timestampLabel: timestamp || "Scan time unavailable",
+              meta: summaryMeta
+            },
+            actions: actionItems,
+            summary: summaryContext
+          });
+
+          buildInsightsCharts({
+            pipeline: {
+              discovered: pipelineStats.discovered || 0,
+              resolvable: pipelineStats.resolvable || 0,
+              webHosts: pipelineStats.webHosts || 0
+            },
+            riskLeaderboard,
+            dnsStats,
+            exposureMatrix,
+            headerCoverage,
+            emailCoverage,
+            statusBreakdown,
+            portCategoryTotals: portscanInsights.categoryTotals
+          });
+
+    } catch (err) {
+      console.error("Error loading data or building report:", err);
+      const sb = document.getElementById("scoreboard");
+      if (sb) {
+        sb.innerHTML = `<article class="summary-card"><div class="summary-card__header"><h2>Report Rendering Error</h2></div><pre style="white-space:pre-wrap;font-size:12px;margin:0;">${escapeHtml(err && err.stack ? err.stack : String(err))}</pre></article>`;
+      }
+    }
+  }
+  loadData();
+
+  window.addEventListener("resize", () => {
+    const visibleRows = Array.from(document.querySelectorAll("#report-table-body tr"));
+    window.requestAnimationFrame(() => updateClampStates(visibleRows));
+  });
+
+      const screenshotBackdrop = document.getElementById('screenshotModal');
+      const screenshotImg = document.getElementById('screenshotModalImg');
+      const screenshotClose = document.getElementById('closeModalBtn');
+
+      function openModal(imgSrc) {
+        if (!screenshotBackdrop || !screenshotImg) return;
+        screenshotImg.src = imgSrc;
+        screenshotBackdrop.classList.add('is-visible');
+      }
+      function closeModal() {
+        if (!screenshotBackdrop || !screenshotImg) return;
+        screenshotBackdrop.classList.remove('is-visible');
+        screenshotImg.src = "";
+      }
+      if (screenshotClose) {
+        screenshotClose.addEventListener('click', closeModal);
+      }
+      if (screenshotBackdrop) {
+        screenshotBackdrop.addEventListener('click', (event) => {
+          if (event.target === event.currentTarget) {
+            closeModal();
+          }
+        });
+      }
+
+      function openLinksModal(url) {
+        const list = (window.linksMap && window.linksMap[url]) ? window.linksMap[url] : [];
+        const box = document.getElementById('linksModalBody');
+        if (!box) return;
+        if (!list.length) {
+          box.innerHTML = "<p>No links found.</p>";
+        } else {
+          box.innerHTML = `<pre class="links-list">${list.join("\n")}</pre>`;
+        }
+        const modal = document.getElementById('linksModal');
+        if (modal) {
+          modal.classList.add('is-visible');
+        }
+      }
+      function closeLinksModal() {
+        const modal = document.getElementById('linksModal');
+        const body = document.getElementById('linksModalBody');
+        if (modal) modal.classList.remove('is-visible');
+        if (body) body.innerHTML = "";
+      }
+      const linksBackdrop = document.getElementById('linksModal');
+      if (linksBackdrop) {
+        linksBackdrop.addEventListener('click', (event) => {
+          if (event.target === event.currentTarget) {
+            closeLinksModal();
+          }
+        });
+      }
+      window.addEventListener('keydown', (event) => {
+        if (event.key === 'Escape') {
+          closeModal();
+          closeLinksModal();
+        }
+      });
+    </script>
+
+  </body>
+</html>
